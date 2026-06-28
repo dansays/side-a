@@ -15,6 +15,12 @@ services:
     restart: unless-stopped
     env_file:
       - side-a.env
+    environment:
+      # Force the in-container data path onto the mounted volume. This MUST win
+      # over any DATA_DIR in side-a.env (e.g. the local-dev default ./data),
+      # which would otherwise write to the container's ephemeral /app/data and be
+      # lost on rebuild. compose `environment` overrides `env_file`.
+      - DATA_DIR=/data
     ports:
       - "8099:8099"
     volumes:
