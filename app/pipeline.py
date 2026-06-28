@@ -65,21 +65,36 @@ def run_trigger() -> dict:
             intro_text, basename=f"{result.release_id}-{result.title}"
         )
 
-        # 5. Revert lights to neutral as the audio fires, then play + log.
+        # 5. Revert lights to neutral, then record the play and scrobble.
+        #    Do this BEFORE play_media: HA's media_player.play_media blocks until
+        #    the HomePod confirms playback (the AirPlay handshake can exceed the
+        #    HTTP timeout). We must not let a slow/timed-out confirmation abort
+        #    the local log + scrobble — the audio still plays HA-side regardless.
         ha.lights("done")
         lights_reset = True
-        ha.play_media(tts.public_url(mp3))
         db.log_play(result.release_id, result.artist, result.title)
 
-        # 6. Scrobble to Last.fm (best effort — never breaks the flow).
         scrobbled = 0
         try:
             scrobbled = scrobble.scrobble_album(release, detail)
         except Exception:
             log.exception("scrobble step failed")
 
+        # 6. Trigger playback (best effort). A confirmation that exceeds the HTTP
+        #    timeout still plays the intro; treat it as non-fatal.
+        played = True
+        try:
+            ha.play_media(tts.public_url(mp3))
+        except Exception:
+            played = False
+            log.warning(
+                "play_media did not confirm in time; the HomePod likely still "
+                "plays the intro",
+                exc_info=True,
+            )
+
         return {
-            "status": "played",
+            "status": "played" if played else "play_unconfirmed",
             "release_id": result.release_id,
             "artist": result.artist,
             "title": result.title,
