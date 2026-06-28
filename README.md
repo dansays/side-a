@@ -18,6 +18,7 @@ HA button ─► POST /trigger ─► app:
    → ElevenLabs renders it to MP3 (served at /media/<file>.mp3)
    → HA media_player.play_media on the HomePod
    → play logged to SQLite
+   → (optional) album scrobbled to Last.fm
 ```
 
 Home Assistant owns all physical I/O (button, flash light, camera, HomePod). The
@@ -36,6 +37,21 @@ talks to HA over its REST API.
 3. Sync your collection: `side-a-sync` (or `POST /sync`). Re-run to pick up new
    records; thumbnails are cached and only downloaded once.
 4. Run: `uvicorn app.main:app --host 0.0.0.0 --port 8099` (or `docker compose up`).
+
+### Last.fm scrobbling (optional)
+
+When an album is identified, Side A can scrobble the **whole album** to Last.fm.
+Since Last.fm scrobbles are per-track, it submits each track from the Discogs
+tracklist, **backdated** so the album "just finished now" (keeps every timestamp
+in the past, which Last.fm reliably accepts). Where Discogs has no track duration,
+`DEFAULT_TRACK_SECONDS` is used. It's a no-op until configured and never blocks the
+core flow.
+
+1. Create an API key + secret at https://www.last.fm/api/account/create and put
+   them in `.env` (`LASTFM_API_KEY`, `LASTFM_API_SECRET`).
+2. Mint a session key once: `python scripts/lastfm_auth.py` → paste the printed
+   `LASTFM_SESSION_KEY=...` into `.env`. (Your password is used only to fetch the
+   key and is never stored.)
 
 ## Home Assistant configuration
 

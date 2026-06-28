@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import time
 
-from . import db, intro, tts
+from . import db, intro, scrobble, tts
 from .config import get_settings
 from .discogs import DiscogsClient
 from .homeassistant import get_ha
@@ -61,6 +61,13 @@ def run_trigger() -> dict:
     ha.play_media(tts.public_url(mp3))
     db.log_play(result.release_id, result.artist, result.title)
 
+    # 6. Scrobble to Last.fm (best effort — never breaks the flow).
+    scrobbled = 0
+    try:
+        scrobbled = scrobble.scrobble_album(release, detail)
+    except Exception:
+        log.exception("scrobble step failed")
+
     return {
         "status": "played",
         "release_id": result.release_id,
@@ -69,5 +76,6 @@ def run_trigger() -> dict:
         "method": result.method,
         "intro": intro_text,
         "media_url": tts.public_url(mp3),
+        "scrobbled": scrobbled,
         "candidates": result.candidates,
     }

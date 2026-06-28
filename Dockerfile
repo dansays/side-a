@@ -12,7 +12,8 @@ RUN pip install --no-cache-dir \
     "requests>=2.31" \
     "rapidfuzz>=3.6" \
     "pydantic>=2.6" \
-    "pydantic-settings>=2.2"
+    "pydantic-settings>=2.2" \
+    "pylast>=5.3"
 
 COPY app ./app
 

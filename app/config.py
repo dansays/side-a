@@ -23,6 +23,12 @@ class Settings(BaseSettings):
         default="eleven_multilingual_v2", alias="ELEVENLABS_MODEL_ID"
     )
 
+    # Last.fm (optional — scrobbling is a no-op until all three are set)
+    lastfm_api_key: str = Field(default="", alias="LASTFM_API_KEY")
+    lastfm_api_secret: str = Field(default="", alias="LASTFM_API_SECRET")
+    lastfm_session_key: str = Field(default="", alias="LASTFM_SESSION_KEY")
+    default_track_seconds: int = Field(default=210, alias="DEFAULT_TRACK_SECONDS")
+
     # Discogs
     discogs_token: str = Field(alias="DISCOGS_TOKEN")
     discogs_username: str = Field(alias="DISCOGS_USERNAME")
@@ -40,6 +46,14 @@ class Settings(BaseSettings):
     app_port: int = Field(default=8099, alias="APP_PORT")
     flash_delay_seconds: float = Field(default=1.5, alias="FLASH_DELAY_SECONDS")
     data_dir: Path = Field(default=Path("./data"), alias="DATA_DIR")
+
+    @property
+    def lastfm_configured(self) -> bool:
+        return bool(
+            self.lastfm_api_key
+            and self.lastfm_api_secret
+            and self.lastfm_session_key
+        )
 
     @property
     def db_path(self) -> Path:
