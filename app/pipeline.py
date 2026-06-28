@@ -10,10 +10,11 @@ never leaves the strip stuck in flash/processing.
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 
-from . import db, intro, scrobble, tts
+from . import db, intro, listening, nowplaying, scrobble, tts
 from .config import get_settings
 from .discogs import DiscogsClient
 from .homeassistant import get_ha
@@ -60,6 +61,20 @@ def run_trigger() -> dict:
 
         # 4. Script + synthesize the intro.
         release = db.get_release(result.release_id)
+
+        # Publish the album to the Now Playing page immediately (cheap), so it
+        # shows up the moment we know what's on the platter. Listening notes are
+        # generated later (step 7) and filled in via polling.
+        nowplaying.set_album(
+            release_id=result.release_id,
+            artist=result.artist,
+            title=result.title,
+            year=release["year"],
+            label=release["label"],
+            cover_url=release["cover_url"] or release["thumb_url"],
+            genres=json.loads(release["genres"] or "[]"),
+        )
+
         intro_text = intro.script_intro(release, detail)
         mp3 = tts.synthesize(
             intro_text, basename=f"{result.release_id}-{result.title}"
@@ -92,6 +107,17 @@ def run_trigger() -> dict:
                 "plays the intro",
                 exc_info=True,
             )
+
+        # 7. Generate expert listening notes for the Now Playing page. This runs
+        #    last, after playback is already underway, so its (multi-second) Claude
+        #    call never delays the audio. The page shows the album right away and
+        #    fills in the notes when this completes. Best effort — never fatal.
+        try:
+            notes = listening.generate(release, detail)
+            nowplaying.set_notes(result.release_id, notes)
+        except Exception:
+            log.exception("listening notes generation failed")
+            nowplaying.set_notes_error(result.release_id)
 
         return {
             "status": "played" if played else "play_unconfirmed",

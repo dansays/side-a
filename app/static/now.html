@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b0b0f" />
+  <title>Side A — Now Playing</title>
+  <style>
+    :root {
+      --bg: #0b0b0f;
+      --panel: #16161d;
+      --text: #f2f0ea;
+      --muted: #9a9690;
+      --accent: #e7c873;
+      --line: #26262f;
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin: 0; overflow-x: hidden; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font: 16px/1.5 ui-sans-serif, -apple-system, "SF Pro Text", system-ui, sans-serif;
+      padding: max(20px, env(safe-area-inset-top)) 20px
+               max(28px, env(safe-area-inset-bottom));
+      max-width: 680px;
+      margin: 0 auto;
+      min-height: 100vh;
+      overflow-wrap: break-word;
+    }
+    p, h1, .track-title { overflow-wrap: break-word; }
+    a { color: var(--accent); text-decoration: none; }
+
+    /* States */
+    .empty {
+      min-height: 70vh; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; text-align: center;
+      color: var(--muted); gap: 14px;
+    }
+    .empty .disc {
+      width: 64px; height: 64px; border-radius: 50%;
+      border: 2px solid var(--line); border-top-color: var(--muted);
+      animation: spin 2.4s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Header / album */
+    .cover-wrap { text-align: center; margin-bottom: 18px; }
+    .cover {
+      width: 100%; max-width: 340px; aspect-ratio: 1 / 1;
+      object-fit: cover; border-radius: 12px;
+      box-shadow: 0 16px 44px rgba(0,0,0,0.55);
+      background: var(--panel);
+    }
+    .cover.placeholder { display: flex; align-items: center; justify-content: center;
+      color: var(--muted); font-size: 13px; }
+    h1 { font-size: 1.6rem; line-height: 1.2; margin: 4px 0 2px; }
+    .artist { font-size: 1.05rem; color: var(--text); margin: 0 0 6px; }
+    .meta { color: var(--muted); font-size: 0.9rem; margin: 0; }
+    .links { margin: 14px 0 6px; }
+    .links a {
+      display: inline-flex; align-items: center; gap: 6px;
+      border: 1px solid var(--line); border-radius: 999px;
+      padding: 7px 14px; font-size: 0.9rem;
+    }
+
+    hr.div { border: 0; border-top: 1px solid var(--line); margin: 22px 0 18px; }
+
+    .section-label {
+      font-size: 0.72rem; letter-spacing: 0.14em; text-transform: uppercase;
+      color: var(--muted); margin: 0 0 10px;
+    }
+    .overview { color: var(--text); margin: 0 0 22px; }
+
+    .track { margin: 0 0 22px; }
+    .track-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; }
+    .track-pos {
+      font-variant-numeric: tabular-nums; color: var(--accent);
+      font-size: 0.8rem; min-width: 1.6em;
+    }
+    .track-title { font-weight: 600; font-size: 1.02rem; }
+    .cue { padding: 10px 0; border-top: 1px solid var(--line); }
+    .cue:first-of-type { border-top: 0; }
+    .cue-ts {
+      display: block; color: var(--accent); margin-bottom: 3px;
+      font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase;
+      font-variant-numeric: tabular-nums;
+    }
+    .cue-note { display: block; color: var(--text); font-size: 0.95rem; }
+
+    .notes-pending, .notes-error { color: var(--muted); display: flex;
+      align-items: center; gap: 10px; font-size: 0.95rem; }
+    .dot {
+      width: 14px; height: 14px; border-radius: 50%;
+      border: 2px solid var(--line); border-top-color: var(--accent);
+      animation: spin 0.9s linear infinite; flex: 0 0 auto;
+    }
+    .foot { text-align: center; color: var(--line); font-size: 0.72rem; margin-top: 28px; }
+  </style>
+</head>
+<body>
+  <main id="app">
+    <div class="empty">
+      <div class="disc"></div>
+      <div>Connecting…</div>
+    </div>
+  </main>
+
+  <script>
+    const app = document.getElementById("app");
+    let lastVersion = -1;
+
+    const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => (
+      { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
+    ));
+
+    function metaLine(a) {
+      return [a.year, a.label, (a.genres || []).join(" · ")]
+        .filter(Boolean).join("  ·  ");
+    }
+
+    function renderCover(a) {
+      if (a.cover_url) {
+        return `<img class="cover" src="${esc(a.cover_url)}" alt="${esc(a.title)} cover"
+                  onerror="this.replaceWith(Object.assign(document.createElement('div'),
+                  {className:'cover placeholder',textContent:'No cover art'}))" />`;
+      }
+      return `<div class="cover placeholder">No cover art</div>`;
+    }
+
+    function renderNotes(a) {
+      if (a.notes_status === "pending") {
+        return `<div class="notes-pending"><span class="dot"></span>
+                  Reading the grooves — listening notes on the way…</div>`;
+      }
+      if (a.notes_status === "error" || !a.notes) {
+        return `<div class="notes-error">Listening notes aren't available for this one.</div>`;
+      }
+      const n = a.notes;
+      let html = "";
+      if (n.overview) html += `<p class="overview">${esc(n.overview)}</p>`;
+      for (const t of (n.tracks || [])) {
+        if (!t.cues || !t.cues.length) continue;
+        html += `<div class="track"><div class="track-head">`;
+        if (t.position) html += `<span class="track-pos">${esc(t.position)}</span>`;
+        html += `<span class="track-title">${esc(t.title)}</span></div>`;
+        for (const c of t.cues) {
+          html += `<div class="cue"><span class="cue-ts">${esc(c.timestamp)}</span>
+                     <span class="cue-note">${esc(c.note)}</span></div>`;
+        }
+        html += `</div>`;
+      }
+      if (!html) {
+        return `<div class="notes-error">No standout moments flagged for this record.</div>`;
+      }
+      return html;
+    }
+
+    function render(state) {
+      const a = state.album;
+      if (!a) {
+        app.innerHTML = `<div class="empty"><div class="disc"></div>
+          <div>Listening for the next record…<br>Hold one up to the camera.</div></div>`;
+        return;
+      }
+      app.innerHTML = `
+        <div class="cover-wrap">${renderCover(a)}</div>
+        <h1>${esc(a.title)}</h1>
+        <p class="artist">${esc(a.artist)}</p>
+        ${metaLine(a) ? `<p class="meta">${esc(metaLine(a))}</p>` : ""}
+        <div class="links">
+          <a href="${esc(a.allmusic_url)}" target="_blank" rel="noopener">
+            Look up on AllMusic ↗</a>
+        </div>
+        <hr class="div" />
+        <p class="section-label">What to listen for</p>
+        ${renderNotes(a)}
+        <div class="foot">SIDE A</div>`;
+      window.scrollTo(0, 0);
+    }
+
+    async function poll() {
+      try {
+        const res = await fetch("/now/state", { cache: "no-store" });
+        const state = await res.json();
+        if (state.version !== lastVersion) {
+          lastVersion = state.version;
+          render(state);
+        }
+      } catch (e) {
+        /* transient network hiccup — keep the current view, try again next tick */
+      }
+    }
+
+    poll();
+    setInterval(poll, 4000);
+  </script>
+</body>
+</html>

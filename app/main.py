@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 
-from . import db
+from . import db, nowplaying
 from .config import get_settings
 from .discogs import sync_collection
 from .pipeline import run_trigger
+
+STATIC_DIR = Path(__file__).parent / "static"
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("side-a")
@@ -58,6 +61,26 @@ def media(filename: str) -> FileResponse:
     if path.parent != settings.media_dir.resolve() or not path.is_file():
         raise HTTPException(status_code=404, detail="not found")
     return FileResponse(path, media_type="audio/mpeg")
+
+
+@app.get("/now")
+def now_page() -> FileResponse:
+    """Mobile listening-guide page for the album currently on the platter.
+
+    A static shell that polls /now/state and renders the current album + notes.
+    """
+    return FileResponse(STATIC_DIR / "now.html", media_type="text/html")
+
+
+@app.get("/now/state")
+def now_state() -> JSONResponse:
+    """Current album + listening notes, with a version the page polls on.
+
+    `no-store` so a proxy/browser never serves a stale album between scans.
+    """
+    return JSONResponse(
+        nowplaying.snapshot(), headers={"Cache-Control": "no-store"}
+    )
 
 
 @app.get("/healthz")
