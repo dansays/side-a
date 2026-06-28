@@ -2,7 +2,7 @@
 """One-time: mint a Last.fm session key for scrobbling.
 
 Reads LASTFM_API_KEY / LASTFM_API_SECRET from your .env, prompts for your Last.fm
-username + password (used ONLY to fetch the long-lived session key — neither is
+username + password (used ONLY to fetch the long-lived session key -- neither is
 stored), and prints the LASTFM_SESSION_KEY line to paste into your .env.
 
 Get an API key/secret at https://www.last.fm/api/account/create
