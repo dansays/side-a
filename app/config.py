@@ -38,8 +38,12 @@ class Settings(BaseSettings):
     ha_base_url: str = Field(alias="HA_BASE_URL")
     ha_token: str = Field(alias="HA_TOKEN")
     ha_camera_entity: str = Field(alias="HA_CAMERA_ENTITY")
-    ha_light_entity: str = Field(alias="HA_LIGHT_ENTITY")
     ha_media_player_entity: str = Field(alias="HA_MEDIA_PLAYER_ENTITY")
+    # HA script that drives the WLED strip; called with an `action` of
+    # flash / processing / done at each pipeline phase.
+    ha_lights_script: str = Field(
+        default="script.side_a_lights", alias="HA_LIGHTS_SCRIPT"
+    )
 
     # App
     app_public_base_url: str = Field(alias="APP_PUBLIC_BASE_URL")

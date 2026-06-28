@@ -1,4 +1,12 @@
-"""Orchestrates one trigger: flash -> snapshot -> identify -> intro -> play -> log."""
+"""Orchestrates one trigger.
+
+Lights (WLED via the HA `lights` script) move through three phases:
+  flash      -> bright, for the camera snapshot
+  processing -> loading animation during identify + intro + TTS
+  done       -> revert to neutral as the audio fires
+The lights are always returned to `done` on any exit path, so a mid-run failure
+never leaves the strip stuck in flash/processing.
+"""
 
 from __future__ import annotations
 
@@ -19,63 +27,72 @@ def run_trigger() -> dict:
     settings = get_settings()
     ha = get_ha()
 
-    # 1. Flash + snapshot. Always turn the light back off, even on error.
-    ha.light_on()
+    lights_reset = False  # ensure the strip always returns to `done`
+    ha.lights("flash")
     try:
+        # 1. Flash + snapshot.
         time.sleep(settings.flash_delay_seconds)
         image = ha.camera_snapshot()
-    finally:
+
+        # 2. Identify against the Discogs collection (loading animation).
+        ha.lights("processing")
+        result = identify(image)
+        if result is None:
+            log.warning("no candidates — is the collection synced?")
+            return {
+                "status": "no_match",
+                "collection_count": db.collection_count(),
+            }
+
+        log.info(
+            "identified %s — %s (method=%s)",
+            result.artist,
+            result.title,
+            result.method,
+        )
+
+        # 3. Optional richer metadata for the intro (best effort).
+        detail = None
         try:
-            ha.light_off()
-        except Exception:  # don't mask an upstream error with a light failure
-            log.exception("failed to turn flash light off")
+            detail = DiscogsClient(settings).get_release_detail(result.release_id)
+        except Exception:
+            log.exception("release detail fetch failed; using basic metadata")
 
-    # 2. Identify against the Discogs collection.
-    result = identify(image)
-    if result is None:
-        log.warning("no candidates — is the collection synced?")
-        return {"status": "no_match", "collection_count": db.collection_count()}
+        # 4. Script + synthesize the intro.
+        release = db.get_release(result.release_id)
+        intro_text = intro.script_intro(release, detail)
+        mp3 = tts.synthesize(
+            intro_text, basename=f"{result.release_id}-{result.title}"
+        )
 
-    log.info(
-        "identified %s — %s (method=%s)",
-        result.artist,
-        result.title,
-        result.method,
-    )
+        # 5. Revert lights to neutral as the audio fires, then play + log.
+        ha.lights("done")
+        lights_reset = True
+        ha.play_media(tts.public_url(mp3))
+        db.log_play(result.release_id, result.artist, result.title)
 
-    # 3. Optional richer metadata for the intro (best effort).
-    detail = None
-    try:
-        detail = DiscogsClient(settings).get_release_detail(result.release_id)
-    except Exception:
-        log.exception("release detail fetch failed; using basic metadata")
+        # 6. Scrobble to Last.fm (best effort — never breaks the flow).
+        scrobbled = 0
+        try:
+            scrobbled = scrobble.scrobble_album(release, detail)
+        except Exception:
+            log.exception("scrobble step failed")
 
-    # 4. Script + synthesize the intro.
-    release = db.get_release(result.release_id)
-    intro_text = intro.script_intro(release, detail)
-    mp3 = tts.synthesize(
-        intro_text, basename=f"{result.release_id}-{result.title}"
-    )
-
-    # 5. Play on the HomePod via HA, then log the play.
-    ha.play_media(tts.public_url(mp3))
-    db.log_play(result.release_id, result.artist, result.title)
-
-    # 6. Scrobble to Last.fm (best effort — never breaks the flow).
-    scrobbled = 0
-    try:
-        scrobbled = scrobble.scrobble_album(release, detail)
-    except Exception:
-        log.exception("scrobble step failed")
-
-    return {
-        "status": "played",
-        "release_id": result.release_id,
-        "artist": result.artist,
-        "title": result.title,
-        "method": result.method,
-        "intro": intro_text,
-        "media_url": tts.public_url(mp3),
-        "scrobbled": scrobbled,
-        "candidates": result.candidates,
-    }
+        return {
+            "status": "played",
+            "release_id": result.release_id,
+            "artist": result.artist,
+            "title": result.title,
+            "method": result.method,
+            "intro": intro_text,
+            "media_url": tts.public_url(mp3),
+            "scrobbled": scrobbled,
+            "candidates": result.candidates,
+        }
+    finally:
+        # Never leave the strip stuck mid-sequence (no-match return, or any error).
+        if not lights_reset:
+            try:
+                ha.lights("done")
+            except Exception:
+                log.exception("failed to reset lights to done")

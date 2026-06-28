@@ -39,20 +39,16 @@ class HomeAssistant:
         resp.raise_for_status()
         return resp.content
 
-    # NOTE (roadmap): these will become a WLED sequence — a bright "flash" preset
-    # for the snapshot, a "loading" animation during identify+TTS, then revert to
-    # the neutral setting at playback. Replace light_on/light_off with
-    # flash()/loading()/restore() (WLED presets via light.turn_on / select / effect
-    # or the WLED JSON API) and re-sequence in pipeline.run_trigger. See README Roadmap.
-    def light_on(self) -> None:
-        self._service(
-            "light", "turn_on", {"entity_id": self.settings.ha_light_entity}
-        )
+    def lights(self, action: str) -> None:
+        """Drive the WLED strip via the HA script.
 
-    def light_off(self) -> None:
-        self._service(
-            "light", "turn_off", {"entity_id": self.settings.ha_light_entity}
-        )
+        `action` is one of: 'flash' (bright, for the snapshot), 'processing'
+        (loading animation during ID/script/TTS), 'done' (revert to neutral as
+        the audio fires). The script entity is called as a service, passing
+        `action` as a script variable.
+        """
+        domain, _, object_id = self.settings.ha_lights_script.partition(".")
+        self._service(domain, object_id, {"action": action})
 
     def play_media(self, url: str) -> None:
         self._service(

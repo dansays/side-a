@@ -11,15 +11,20 @@ album this is."
 
 ```
 HA button ─► POST /trigger ─► app:
-   light_on → wait → HA camera snapshot → light_off
+   lights("flash") → wait → HA camera snapshot
+   → lights("processing")
    → Claude reads cover  → fuzzy-match vs synced Discogs collection
                          → (if ambiguous) Claude visually confirms vs cover thumbs
    → Claude scripts a DJ intro from the release metadata
    → ElevenLabs renders it to MP3 (served at /media/<file>.mp3)
-   → HA media_player.play_media on the HomePod
+   → lights("done") → HA media_player.play_media on the HomePod
    → play logged to SQLite
    → (optional) album scrobbled to Last.fm
 ```
+
+The WLED strip is driven by an HA script (`HA_LIGHTS_SCRIPT`, default
+`script.side_a_lights`) called with an `action` of `flash` / `processing` / `done`
+at each phase. The app always returns the strip to `done`, even if a run fails.
 
 Home Assistant owns all physical I/O (button, flash light, camera, HomePod). The
 app is a headless Python service designed to run in Docker on a Synology NAS and
@@ -76,8 +81,8 @@ rest_command:
     - service: rest_command.side_a_trigger
 ```
 
-The app itself sequences the flash light, snapshot, and playback — the automation
-only needs to forward the button press.
+The app itself sequences the lights (flash/processing/done), snapshot, and
+playback — the automation only needs to forward the button press.
 
 ## Verification
 
@@ -85,8 +90,9 @@ only needs to forward the button press.
 - **Offline identify:** `python scripts/identify_image.py photo_of_an_owned_record.jpg`
   → confirms it resolves to the correct release (try look-alike covers too).
 - **End-to-end (no button):** `curl -X POST http://localhost:8099/trigger` → the
-  flash light toggles, a snapshot is taken, an MP3 lands in `data/media/`, and the
-  intro plays on the HomePod. Check `GET /healthz` for the collection count.
+  WLED strip cycles flash → processing → done, a snapshot is taken, an MP3 lands in
+  `data/media/`, and the intro plays on the HomePod. Check `GET /healthz` for the
+  collection count.
 
 ## Deployment
 
@@ -101,12 +107,7 @@ is intentionally out of scope for now.
 
 ## Roadmap
 
-- **WLED "flash" sequence.** Today the flash is a single HA `light` entity toggled
-  on→snapshot→off (`app/homeassistant.py`, `app/pipeline.py`). Replace it with a
-  WLED strip sequence: trigger a bright "flash" preset/config for the snapshot, a
-  "loading" animation while the album is being identified + the intro generated,
-  then revert to the neutral light setting when playback starts. Implement as
-  `flash()` / `loading()` / `restore()` on the HA client (WLED exposes presets via
-  `light.turn_on`/`select`/effect attributes or its JSON API), and sequence them in
-  `pipeline.run_trigger`.
+- ~~**WLED flash sequence.**~~ Done — the strip is driven by the
+  `HA_LIGHTS_SCRIPT` HA script with `flash` / `processing` / `done` actions (see
+  *How it works*).
 - **Play-count / "due for washing" report** (deferred, see Scope).
