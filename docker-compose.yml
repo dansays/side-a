@@ -21,6 +21,13 @@ services:
       # which would otherwise write to the container's ephemeral /app/data and be
       # lost on rebuild. compose `environment` overrides `env_file`.
       - DATA_DIR=/data
+    extra_hosts:
+      # Containers can't resolve .local/mDNS names, so HA_BASE_URL pointed at
+      # homeassistant.local fails with a NameResolutionError and aborts every
+      # trigger. Map it to HA's IP here so it works even if side-a.env carries the
+      # .local form. Update this IP if HA's address changes (a DHCP reservation
+      # for Home Assistant avoids that).
+      - "homeassistant.local:192.168.1.58"
     ports:
       - "8099:8099"
     volumes:
