@@ -1,0 +1,21 @@
+# Side A for Synology Container Manager (or `docker compose up -d --build`).
+# Mirrors the shoppr deployment model: env file beside this compose, and the
+# data volume lives OUTSIDE the project dir so deploy-nas.sh's `rsync --delete`
+# never touches the SQLite db, cached thumbnails, or generated mp3s.
+#
+# For LOCAL dev, don't use compose — run uvicorn directly with DATA_DIR=./data
+# (see README). This compose file targets the NAS.
+services:
+  side-a:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: side-a-app
+    container_name: side-a
+    restart: unless-stopped
+    env_file:
+      - side-a.env
+    ports:
+      - "8099:8099"
+    volumes:
+      - /volume1/docker/side-a/data:/data
