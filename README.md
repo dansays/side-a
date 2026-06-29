@@ -130,3 +130,12 @@ is intentionally out of scope for now.
   `HA_LIGHTS_SCRIPT` HA script with `flash` / `processing` / `done` actions (see
   *How it works*).
 - **Play-count / "due for washing" report** (deferred, see Scope).
+- **Factual enrichment for listening notes.** The per-track insight in the Now
+  Playing notes currently comes from the model's own training knowledge — Discogs
+  only supplies the factual scaffold (tracklist, personnel, durations, liner
+  notes). That's strong on well-documented records but can be thin or wrong on
+  obscure ones, and timestamps are estimates since the model never hears the
+  audio. To improve accuracy, enrich the `detail` context passed to
+  `listening.generate` with more documented text (fuller Discogs notes, or a
+  Wikipedia / AllMusic blurb fetched at scan time) so it reasons from sources
+  rather than memory.
